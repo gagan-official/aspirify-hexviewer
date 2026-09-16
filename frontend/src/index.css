@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background-color: #0f0d1d;
+  color: #e5e7eb;
+}
+
+/* A tiny custom scrollbar so the hex pane doesn't look like a plain <div> */
+.hexScroll::-webkit-scrollbar {
+  width: 10px;
+}
+.hexScroll::-webkit-scrollbar-thumb {
+  background-color: #384bff;
+  border-radius: 99px;
+}
+.hexScroll::-webkit-scrollbar-track {
+  background-color: #1a1830;
+}
