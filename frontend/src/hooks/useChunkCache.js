@@ -84,7 +84,6 @@ export default function useChunkCache(fileId) {
           if (generation !== generationRef.current) return; // don't touch the new file's pending set
           pending.current.delete(chunkIndex);
           forceRerender((n) => n + 1);
-          console.log("first")
         });
     },
     [fileId]
