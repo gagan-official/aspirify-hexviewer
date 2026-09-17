@@ -22,6 +22,14 @@ npm run dev
 
 Open the URL printed by Vite. Put files directly in `./data` at the repository root. Subdirectories are ignored.
 
+If you want to put a **10GB** file, you can simply run this command in terminal:
+
+```sh
+cd data/ && fsutil file createnew test_10gb.dat 10737418240
+```
+
+You'll get an instant 10GB like file for testing.
+
 ## Architecture
 
 - `backend/src/controllers/filesController.js` lists files and streams requested ranges from disk.
