@@ -1,15 +1,16 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { FixedSizeList as List } from "react-window";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { List } from "react-window";
 import HexRow from "./HexRow";
 
 const ROW_HEIGHT = 20;
 const VIEWPORT_HEIGHT = 560;
-const OVERSCAN_ROWS = 12;
+const OVERSCAN_COUNT = 12;
 
 export default function HexGrid({
   fileSize,
   bytesPerRow,
   readRange,
+  chunkVersion,
   selection,
   onSelectionChange,
   jumpTarget, // { offset, nonce } - nonce so the same offset can be jumped to twice
@@ -21,13 +22,13 @@ export default function HexGrid({
   const draggingRef = useRef(false);
   const dragAnchorRef = useRef(null);
 
-  const handleByteDown = (offset) => {
+  const handleByteDown = useCallback((offset) => {
     draggingRef.current = true;
     dragAnchorRef.current = offset;
     onSelectionChange({ start: offset, end: offset });
-  };
+  }, [onSelectionChange]);
 
-  const handleByteEnter = (offset) => {
+  const handleByteEnter = useCallback((offset) => {
     setHoveredOffset(offset);
     if (draggingRef.current && dragAnchorRef.current !== null) {
       const anchor = dragAnchorRef.current;
@@ -36,7 +37,7 @@ export default function HexGrid({
         end: Math.max(anchor, offset),
       });
     }
-  };
+  }, [onSelectionChange]);
 
   useEffect(() => {
     const stopDragging = () => {
@@ -46,43 +47,41 @@ export default function HexGrid({
     return () => window.removeEventListener("mouseup", stopDragging);
   }, []);
 
-  // Programmatic jumps use react-window's full virtual list coordinate space.
+  // Programmatic jumps use react-window's row-index coordinate space.
   useEffect(() => {
     if (!jumpTarget || !listRef.current) return;
     const targetRow = Math.floor(jumpTarget.offset / bytesPerRow);
-    listRef.current.scrollToItem(targetRow, "center");
+    listRef.current.scrollToRow({ index: targetRow, align: "center" });
     onSelectionChange({ start: jumpTarget.offset, end: jumpTarget.offset });
   }, [jumpTarget, bytesPerRow, onSelectionChange]);
 
   const handleLeave = useCallback(() => setHoveredOffset(null), []);
 
+  const rowProps = useMemo(
+    () => ({
+      bytesPerRow,
+      fileSize,
+      readRange,
+      chunkVersion,
+      hoveredOffset,
+      selection,
+      onByteEnter: handleByteEnter,
+      onByteDown: handleByteDown,
+    }),
+    [bytesPerRow, fileSize, readRange, chunkVersion, hoveredOffset, selection, handleByteEnter, handleByteDown]
+  );
+
   return (
     <div onMouseLeave={handleLeave} className="hexScroll overflow-hidden rounded border border-slate-800 bg-[#0f0d1d]">
       <List
-        ref={listRef}
-        height={VIEWPORT_HEIGHT}
-        itemCount={totalRows}
-        itemSize={ROW_HEIGHT}
-        width="100%"
-        overscanCount={OVERSCAN_ROWS}
-        itemData={{ bytesPerRow, fileSize, readRange, hoveredOffset, selection, onByteEnter: handleByteEnter, onByteDown: handleByteDown }}
-        itemKey={(row) => row}
-      >
-        {({ index, style, data }) => {
-          const rowOffset = index * data.bytesPerRow;
-          return (
-            <HexRow
-              style={style}
-              rowOffset={rowOffset}
-              bytes={data.readRange(rowOffset, Math.min(data.bytesPerRow, data.fileSize - rowOffset))}
-              hoveredOffset={data.hoveredOffset}
-              selection={data.selection}
-              onByteEnter={data.onByteEnter}
-              onByteDown={data.onByteDown}
-            />
-          );
-        }}
-      </List>
+        listRef={listRef}
+        style={{ height: VIEWPORT_HEIGHT }}
+        rowCount={totalRows}
+        rowHeight={ROW_HEIGHT}
+        rowComponent={HexRow}
+        rowProps={rowProps}
+        overscanCount={OVERSCAN_COUNT}
+      />
     </div>
   );
 }

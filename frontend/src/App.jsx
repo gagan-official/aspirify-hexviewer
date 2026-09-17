@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getFiles } from "./api";
 import { formatFileSize, readUint } from "./hexUtils";
 import useChunkCache from "./hooks/useChunkCache";
@@ -71,15 +71,19 @@ function Inspector({ file, selectedOffset, readRange }) {
 
 export default function App() {
   const [files, setFiles] = useState([]);
+  const isFilesLoaded = useRef(false);
   const [file, setFile] = useState(null);
   const [bytesPerRow, setBytesPerRow] = useState(16);
   const [selection, setSelection] = useState(null);
   const [jumpTarget, setJumpTarget] = useState(null);
   const [error, setError] = useState("");
-  const { readRange } = useChunkCache(file?.id);
+  const { readRange, chunkVersion } = useChunkCache(file?.id);
 
   useEffect(() => {
-    getFiles().then(setFiles).catch((err) => setError(err.message));
+    if(!isFilesLoaded.current) {
+      getFiles().then(setFiles).catch((err) => setError(err.message));
+      isFilesLoaded.current = true;
+    }
   }, []);
 
   const selectedFile = useMemo(
@@ -122,9 +126,11 @@ export default function App() {
               />
               <div className="p-4">
                 <HexGrid
+                  key={selectedFile.id}
                   fileSize={selectedFile.size}
                   bytesPerRow={bytesPerRow}
                   readRange={readRange}
+                  chunkVersion={chunkVersion}
                   selection={selection}
                   onSelectionChange={setSelection}
                   jumpTarget={jumpTarget}

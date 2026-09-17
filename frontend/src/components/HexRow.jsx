@@ -4,15 +4,25 @@ function isSelected(offset, selection) {
   return selection && offset >= selection.start && offset <= selection.end;
 }
 
+// react-window v2's `List` no longer wraps everything in an `itemData` object.
+// Instead, whatever you pass as `rowProps` is spread directly onto this
+// component alongside `index` and `style`. Because of that, the per-row
+// derivation (rowOffset / bytes) that used to live in HexGrid's render
+// function now happens here, based on `index`.
 export default function HexRow({
+  index,
   style,
-  rowOffset,
-  bytes,
+  bytesPerRow,
+  fileSize,
+  readRange,
   hoveredOffset,
   selection,
   onByteEnter,
   onByteDown,
 }) {
+  const rowOffset = index * bytesPerRow;
+  const bytes = readRange(rowOffset, Math.min(bytesPerRow, fileSize - rowOffset));
+
   return (
     <div style={style} className="flex items-center font-mono text-sm leading-5 h-5 whitespace-nowrap select-none">
       <span className="text-slate-500 w-28 shrink-0">

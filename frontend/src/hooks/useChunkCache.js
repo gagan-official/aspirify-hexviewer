@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from "react";
+import { useRef, useCallback, useState } from "react";
 import { fetchChunk } from "../api";
 
 // 64KB chunks: big enough that scrolling through a few hundred rows doesn't
@@ -16,17 +16,34 @@ export default function useChunkCache(fileId) {
   const cache = useRef(new Map()); // chunkIndex -> Uint8Array
   const pending = useRef(new Set()); // chunkIndex currently in flight
 
+  // Bumped every time the file changes. Captured by each in-flight fetch at
+  // request time so that, if its response lands *after* we've already moved
+  // on to another file, we can tell it's stale and throw it away instead of
+  // writing another file's bytes into the (now-reused) chunkIndex slot.
+  const generationRef = useRef(0);
+  const prevFileIdRef = useRef(fileId);
+
   // We store bytes in refs (not React state) so reading them doesn't
   // trigger re-renders. This little counter is the only thing that does -
   // it bumps once a chunk we were waiting on actually arrives, which tells
   // whatever's rendering "some of your nulls might be real bytes now".
-  const [, forceRerender] = useState(0);
+  const [chunkVersion, forceRerender] = useState(0);
 
-  useEffect(() => {
-    // Switching files invalidates everything we've cached.
+  // Switching files invalidates everything we've cached. This has to happen
+  // synchronously during render (not in a useEffect) - an effect only runs
+  // *after* this render has already committed, which means the very first
+  // readRange() call for the new file would still see the old file's chunks
+  // sitting in the cache and return them as if they were valid, non-null
+  // bytes. Since those bytes wouldn't be null, nothing would queue a fetch
+  // or trigger a re-render afterwards, so the stale content would just
+  // stick around indefinitely. Clearing here, before any reads happen this
+  // render, guarantees the new file starts from a clean cache.
+  if (prevFileIdRef.current !== fileId) {
+    prevFileIdRef.current = fileId;
+    generationRef.current += 1;
     cache.current.clear();
     pending.current.clear();
-  }, [fileId]);
+  }
 
   const touch = (chunkIndex) => {
     // Map keeps insertion order, so deleting + re-adding on every access
@@ -50,19 +67,24 @@ export default function useChunkCache(fileId) {
       if (cache.current.has(chunkIndex) || pending.current.has(chunkIndex)) return;
 
       pending.current.add(chunkIndex);
+      const generation = generationRef.current;
       fetchChunk(fileId, chunkIndex * CHUNK_SIZE, CHUNK_SIZE)
         .then((bytes) => {
+          if (generation !== generationRef.current) return; // stale: we've since switched files
           cache.current.set(chunkIndex, bytes);
           evictIfNeeded();
         })
         .catch((err) => {
+          if (generation !== generationRef.current) return;
           // A failed chunk just stays "unknown" - the row will keep
           // showing placeholders and we'll retry next time it's requested.
           console.error(`Chunk ${chunkIndex} failed to load:`, err);
         })
         .finally(() => {
+          if (generation !== generationRef.current) return; // don't touch the new file's pending set
           pending.current.delete(chunkIndex);
           forceRerender((n) => n + 1);
+          console.log("first")
         });
     },
     [fileId]
@@ -97,5 +119,5 @@ export default function useChunkCache(fileId) {
     [ensureChunk]
   );
 
-  return { readRange };
+  return { readRange, chunkVersion };
 }
